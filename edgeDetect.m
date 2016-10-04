@@ -7,7 +7,11 @@ function [ output ] = edgeDetect( input )
 
 % define some vars here
 num_corners = 50;
-derivative_filter = [-1 0 1];
+derivative_filter = [-1 0 1]/2;
+
+imshow(input);
+title('original');
+figure;
 
 % preprocessing for image
 input = rgb2gray(input);
@@ -39,15 +43,59 @@ figure;
 % IE: TRIANGLES, SQUARES, OCTAGONS, ...
 
 % apply Ix
-Ix = imfilter(input, derivative_filter);
+Ix = imfilter(im, derivative_filter);
 imshow(Ix);
 title('I_x filter');
 figure;
 
 % apply Iy
-Iy = imfilter(input, derivative_filter');
+Iy = imfilter(im, derivative_filter');
 imshow(Iy);
 title('I_y filter');
+figure;
+
+% grad mag
+Imag = sqrt(double(Ix.^2 + Iy.^2));
+maxVal = max(max(Imag));
+indices = Imag < maxVal-1;
+Imag(indices) = 0;
+imshow(Imag);
+title('I_{mag} filter');
+figure;
+
+% matlab edge detection
+edges = edge(im);
+imshow(edges);
+title('matlab edge detection');
+figure;
+
+% boundaries
+[B,L,N,A] = bwboundaries(edges);
+mat = [1 0 0 1 0;
+    0 1 0 1 1;
+    1 0 0 0 1;
+    1 1 1 0 0;
+    0 1 1 0 1];
+spy(mat);
+mat
+title('adjacency matrix');
+figure;
+imshow(L);
+title('regions');
+figure;
+
+% tutorial on boundaries and such
+% https://www.mathworks.com/help/images/ref/bwboundaries.html
+imshow(input);
+title('boundaries');
+hold on;
+for k=1:length(B)
+    %if(~sum(A(k,:)))
+       boundary = B{k};
+    %end
+    plot(boundary(:,2), boundary(:,1), 'r', 'LineWidth', 2);
+end
+
 
 output = im;
 
