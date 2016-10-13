@@ -2,6 +2,9 @@ function [ output ] = edgeDetect( input )
 % edgeDetect - apply smoothing and LoG to detect
 % edges of a photo.
 
+% use this in matlab
+%https://www.mathworks.com/help/vision/examples/object-detection-in-a-cluttered-scene-using-point-feature-matching.html#btt5qyu
+
 % could I apply some sort of KNN classifier to detect
 % where the signs are located?
 
@@ -18,6 +21,16 @@ input = rgb2gray(input);
 im = imgaussfilt(input, 1);
 imshow(im);
 title('pre-processed image');
+figure;
+
+% apply conn comp func
+bw = input;
+cc = bwconncomp(bw)
+numPixels = cellfun(@numel,cc.PixelIdxList);
+[~,idx] = max(numPixels);
+bw(cc.PixelIdxList{idx}) = 0;
+imshow(bw);
+title('set main object to 0');
 figure;
 
 % apply LoG filter
@@ -76,10 +89,9 @@ mat = [1 0 0 1 0;
     1 0 0 0 1;
     1 1 1 0 0;
     0 1 1 0 1];
-spy(mat);
-mat
-title('adjacency matrix');
-figure;
+% spy(mat);
+% title('adjacency matrix');
+% figure;
 imshow(L);
 title('regions');
 figure;
