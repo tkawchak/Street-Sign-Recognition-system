@@ -1,15 +1,9 @@
-function [ template ] = makeTemplate( image, rows, cols, scale)
+function [ template ] = makeTemplate( image, dim)
 %MAKETEMPLATE makes a template of the image
-    %image = double(image);
-    imshow(image);
-    figure;
-    image_grey = rgb2gray(image);
-    imshow(image_grey);
-    figure;
-    im_crop = image_grey(rows, cols);
-    imshow(im_crop);
-    figure;
-    template = double(im_crop) - mean2(im_crop);
+    template = rgb2gray(image);
+    [m, n] = size(template);
+    max_dim = max(m, n);
+    scale = dim / max_dim;
     template = imresize(template, scale);
     imshow(template);
 end
