@@ -35,6 +35,7 @@ im = rand(20, 20);
 
 
 %% perorm a forward pass
+
 net1 = imfilter(im, w1) + b1;
 out1 = 1/(1 + exp(-net1));
 
@@ -60,21 +61,60 @@ out5 = 1/(1 + exp(-net5));
 
 %% perform a backward pass - training
 target = 1;
-eta = 0.1;
+eta = 1;
+eta_conv = eta;
+
+% a 10x10 image
+% convoved with 3x3 filter
+im = 2*[ones(5, 10); zeros(5, 10)] - 1;
+im2 = 2*[zeros(5, 10); ones(5, 10)] - 1;
+out2 = padarray(im, [1 1], 0, 'both');
 
 % 10 x 10 (or 100 x 1)
 % we add a 1 for the bias (101 x 1)
-out3 = rand(10, 10);
-out3 = reshape(out3, 100, 1);
-out3(end+1) = 1;
+%out3 = rand(10, 10);
+%out3 = reshape(out3, 100, 1);
+%out3(end+1) = 1;
 
+% 3x3 filter
+w1 = 2*rand(3, 3)-1;
+% 3x3 filter
+w2 = 2*rand(3, 3)-1;
+% 1 x 1 bias value
+b2 = 0.2;
+% 3x3 filter
+w3 = 2*rand(3, 3)-1;
+w3_init = w3;
+% bias value (scalar)
+b3 = 0.2;
 % 101 x 10
-w4 = zeros(101, 10);
+w4 = 2*rand(101, 10)-1;
+w4_init = w4;
 % 11 x 1
-w5 = zeros(11, 1);
+w5 = 2*rand(11, 1)-1;
+w5_init = w5;
 
-for i=1:5000
+for i=1:1000
     % forward pass
+    
+    % 10 x 10
+    net2 = imfilter(out1(2:end-1, 2:end-1), w2) + b2);
+    % 10 x 10
+    out2 = max(net2, 0);
+    %fprintf('forward layer 2\n');
+    
+    pool1 = maxpool(out2);
+    
+    % 10 x 10
+    net3 = imfilter(out2(2:end-1, 2:end-1), w3) + b3;
+    % 10 x 10
+    out3 = max(net3, 0);
+    %fprintf('forward layer 3\n');
+    
+    % 100 x 1
+    out3 = reshape(out3, 100, 1);
+    % 101 x 1
+    out3(end+1) = 1;
     % 10 x 1
     net4 = w4' * out3;
     % 10 x 1
@@ -100,7 +140,7 @@ for i=1:5000
     %fprintf('back prop layer 5\n');
     
     % 11 x 1
-    e4 = w5 * delta5';
+    e4 = w5 * delta5;
     % 11 x 1
     delta4 =  - e4 .* (out4 .* (1-out4));
     % 10 x 1
@@ -109,7 +149,46 @@ for i=1:5000
     w4 = w4 - eta * out3 * delta4';
     %fprintf('back prop layer 4\n');
     
-    e3 = w4 .* delta4';
+    % 101 x 1
+    e3 = w4 * delta4;
+    %fprintf('here\n');
+    % 101 x 1
+    delta3 = zeros(101, 1);
+    %fprintf('here\n');
+    for k=1:length(e3)
+        if (out3(k) == 0)
+            delta3(k) = 0;
+        else
+            % should this be negative???
+            delta3(k) = e3(k);
+        end
+    end
+    
+    % 10 x 10
+    delta3 = delta3(1:100, :);
+    delta3 = reshape(delta3, 10, 10);
+    [m, n] = size(delta3);
+    
+    maxout = zeros(10, 10);
+    
+    % 3 x 3
+    % loop through the output image
+    for k=1:m
+        for j=1:n
+            % loop through the size of the filter
+            for s=[1 2 3]
+                for t = [1 2 3]
+                    w3(s, t) = w3(s, t) - eta_conv * delta3(k, j) * ...
+                        out2(k+s-1, j+t-1);
+                    e2(k, j) = delta3(k, j)
+                end
+            end
+        end
+    end
+    
+    
+    
+    %fprintf('back prop layer 3\n');
     
 end
 
@@ -140,3 +219,15 @@ end
 % w_n is a weight from out_n to net_(n+1)
 
 % HOW TO DO WEIGHT UPDATING FOR CONVOLUTIONAL LAYER??
+%   updates will occur for each weight multiple times
+% derivative of the ReLU layer:
+%   1 or x != 0
+%   0 for x = 0
+% updates for convolution operation:
+%   error at the output from the convolution
+%   multiplied by the input to the convolution
+%   so for each node in the output
+%   we update each of the weights in the convolution
+%   for this I will only update the weights for
+%   values that are not on the border so we do not have to deal with
+%   any bordering values and such
