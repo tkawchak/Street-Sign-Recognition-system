@@ -18,16 +18,16 @@ image_points = detectSURFFeatures(im_g, 'MetricThreshold', 10,...
     'NumScaleLevels', 6, 'NumOctaves', 2);
 temp_points = detectSURFFeatures(temp, 'MetricThreshold', 10,...
     'NumScalelevels', 6, 'NumOctaves', 2);
-subplot(1, 2, 1);
-imshow(im_g);
-title('Feature points');
-hold on;
-plot(image_points);
-subplot(1, 2, 2);
-imshow(temp);
-hold on;
-plot(temp_points);
-figure('units', 'normalized', 'OuterPosition', [0 0 1 1]);
+% subplot(1, 2, 1);
+% imshow(im_g);
+% title('Feature points');
+% hold on;
+% plot(image_points);
+% subplot(1, 2, 2);
+% imshow(temp);
+% hold on;
+% plot(temp_points);
+% figure('units', 'normalized', 'OuterPosition', [0 0 1 1]);
 
 % extract features from the image and template
 [im_feat, im_points] = extractFeatures(im_g, image_points);
@@ -36,34 +36,33 @@ figure('units', 'normalized', 'OuterPosition', [0 0 1 1]);
 [pairs, matchVal] = matchFeatures(temp_feat, im_feat, 'Method', 'Exhaustive', ...
     'MatchThreshold', 1, 'MaxRatio', 0.8, 'Unique', true);
 
-if (length(pairs) >= 4)
+% somehow, sort these pairs by increasing match distance
+% then, process these in that order.
+[top_matches, indices] = sort(matchVal, 'ascend');
+pairs = pairs(indices, :);
 
-    % somehow, sort these pairs by increasing match distance
-    % then, process these in that order.
-    [top_matches, indices] = sort(matchVal, 'ascend');
-    pairs = pairs(indices, :);
+% plot the mapping between template points
+% and points in the scene.
+matchedTempPoints = temp_points(pairs(:, 1), :);
+matchedScenePoints = im_points(pairs(:, 2), :);
 
-    % plot the mapping between template points
-    % and points in the scene.
-    matchedTempPoints = temp_points(pairs(:, 1), :);
-    matchedScenePoints = im_points(pairs(:, 2), :);
+subplot(1, 2, 1);
+showMatchedFeatures(temp, im_g, matchedTempPoints, ...
+    matchedScenePoints, 'montage');
+title('All Matched Points');
 
-    subplot(1, 2, 1);
-    showMatchedFeatures(temp, im_g, matchedTempPoints, ...
-        matchedScenePoints, 'montage');
-    title('All Matched Points');
+numPoints = length(matchedTempPoints);
+if numPoints > 12
+    numPoints = 12;
+end
 
-    numPoints = length(matchedTempPoints);
-    if numPoints > 12
-        numPoints = 12;
-    end
+if (numPoints >= 4)
     best_inliers = 0;
     error_threshold = 10;
     best_H = zeros(3, 3);
     H = zeros(8, 8);
     H(1,3)=1; H(2,6)=1; H(3,3)=1; H(4,6)=1; H(5,3)=1; H(6,6)=1; H(7,3)=1; H(8,6)=1;
 
-    warning('off', 'all');
     combinations = ones(numPoints, 4);
     row = 1;
     % make sure these are all unique
@@ -79,10 +78,11 @@ if (length(pairs) >= 4)
             end
         end
     end
-    fprintf('rows: %d\n', row);
+    %fprintf('rows: %d\n', row);
 
     numCombinations = length(combinations);
     for i=1:numCombinations
+       %fprintf('estimating homography\n');
        % choose a random subset of four points
        points = combinations(i, :);
        %fprintf('iter: %d\n', i);
@@ -124,12 +124,15 @@ if (length(pairs) >= 4)
        H(8,4)=x4;H(8,5)=y4;H(8,7)=(-x4*y_4);H(8,8)=(-y4*y_4);
        x = [x_1; y_1; x_2; y_2; x_3; y_3; x_4; y_4];
 
+       warning('off', 'all');
        h = zeros(9, 1);
        h(1:8) = H\x;
        h(9) = 1;
        h = reshape(h, 3, 3)';
+       warning('on', 'all');
 
        inlier_count = 0;
+       %fprintf('estimating outliers\n');
        % transform all of the points
        for j=1:numPoints
            p = matchedTempPoints(j).Location;
@@ -158,7 +161,6 @@ if (length(pairs) >= 4)
        end
 
     end
-    warning('on', 'all');
 
     %boundingBox = transformPointsForward(tform, boundingBox);
     ul = best_H * [1; 1; 1]; p1 = ul(1:2)/ul(3);
@@ -168,19 +170,45 @@ if (length(pairs) >= 4)
     
     % estimate whether or not the bounding box is a rectangle-ish shape
     % if not then return 0
+    top = ur-ul; top_norm = norm(top, 2);
+    left = ul-bl; left_norm = norm(left, 2);
+    bottom = bl-br; bottom_norm = norm(bottom, 2);
+    right = br-ur; right_norm = norm(right, 2);
+    ang_tl = acosd(top' * left  / (top_norm * left_norm));
+    ang_bl = acosd(left' * bottom / (left_norm * bottom_norm));
+    ang_br = acosd(bottom' * right / (bottom_norm * right_norm));
+    ang_ur = acosd(right' * top / (right_norm * top_norm));
+    fprintf('angles: %.2f, %.2f, %.2f, %.2f\n', ang_tl, ang_bl, ang_br, ang_ur);
+    angle_error = abs(90-[ang_tl; ang_bl; ang_br; ang_ur]);
+    fprintf('angle error: %.2f\n', max(angle_error));
+    norm_ratios = [top_norm / left_norm;
+        left_norm / bottom_norm;
+        bottom_norm / right_norm;
+        right_norm / top_norm];
+    fprintf('norm_ratios: %.2f, %.2f, %.2f, %.2f\n', norm_ratios(1), ...
+        norm_ratios(2), norm_ratios(3), norm_ratios(4));
+    if max(angle_error) > 25
+        boundingBox = 0;
+        fprintf('angles too skewed\n\n');
+    elseif ((max(norm_ratios) > 1.4) || (min(norm_ratios) < (1/1.4)))
+        boundingBox = 0;
+        fprintf('max: %.2f, min: %.2f\n', max(norm_ratios), min(norm_ratios));
+        fprintf('sides too skewed\n\n');
+    else
+        % plot the box
+        fprintf('good match\n\n');
+        boundingBox = [p1'; p2'; p3'; p4'; p1';] / (5 * scale);
+        subplot(1, 2, 2);
+        imshow(im);
+        hold on;
+        line(boundingBox(:, 1), boundingBox(:, 2), 'Color', 'g');
+        title('Detected Sign');
+    end
     
-    % plot the box
-    boundingBox = [p1'; p2'; p3'; p4'; p1';] / (5 * scale);
-    subplot(1, 2, 2);
-    imshow(im);
-    hold on;
-    line(boundingBox(:, 1), boundingBox(:, 2), 'Color', 'g');
-    title('Detected Sign');
 else
     boundingBox = 0;
+    fprintf('not enough points\n\n');
 end
-
-% HAVE A CONDITION TO CHECK IF THE RESULT IS NOT GREAT
 
 end
 
